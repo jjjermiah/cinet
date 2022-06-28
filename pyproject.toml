@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cinet"
-version = "0.1.0"
+version = "0.1.1"
 description = "Scikit-Learn interface for CINET PyTorch siamese neural network"
 authors = ["Christopher Eeles"]
 license = "MIT"
@@ -15,6 +15,8 @@ numpy = "^1.23.0"
 pandas = "^1.4.3"
 lifelines = "^0.27.1"
 sklearn = "^0.0"
+tabulate = "^0.8.10"
+ConfigSpace = "^0.5.0"
 
 [tool.poetry.dev-dependencies]
 [tool.semantic_release]
