@@ -8,6 +8,7 @@ import argparse
 ## FIXME:: modularize these imports and remoave as many as possible!
 
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 import torch
 import torch.nn as nn
@@ -30,10 +31,12 @@ def getCINETSampleInput():
     return pd.read_csv('./gene_CCLE_rnaseq_5-Fluorouracil_response.csv')
 
 class cinet(sklearn.base.BaseEstimator):
-    def __init__(self):
+    def __init__(self, modelPath=''):
         # super.__init__() # Is this necessary?
         self.arg_lists = []
         self._estimator_type = 'classifier'
+        self.modelPath = modelPath
+
 
     def set_params(self, **params):
         self.batch_size = params['batch_size'] if 'batch_size' in params else 256
@@ -45,6 +48,7 @@ class cinet(sklearn.base.BaseEstimator):
         self.sc_milestones = params['sc_milestones'] if 'sc_milestones' in params else [1,2,5,15,30]
         self.sc_gamma = params['sc_gamma'] if 'sc_gamma' in params else 0.35
         self.delta = params['delta'] if 'delta' in params else 0
+        self.dropout = params['dropout'] if 'dropout' in params else 0
 
         # Setup parsers
         self.parser = argparse.ArgumentParser()
@@ -95,11 +99,13 @@ class cinet(sklearn.base.BaseEstimator):
             'hidden_two': 512,
             'hidden_three': 128,
             'hidden_four': 0,  # TODO: Figure out why
-            'dropout': 0.029255543838070382,
-            'lr': 0.03846885084652688,
+            'dropout': 0.4,
+            'lr': 0.01,
             'batchnorm': True,
             # 'dat_size': self.gene_data.gene_num(),
         }
+
+   
 
     def get_params(self, deep=True):
         return None
@@ -151,12 +157,19 @@ class cinet(sklearn.base.BaseEstimator):
                                      checkpoint_callback],
                           check_val_every_n_epoch=self.hparams.check_val_every_n_epoch)
         # overfit_pct=hparams.overfit_pct)
+
         trainer.fit(self.siamese_model,
                     train_dl,
                     val_dl) 
+        if self.modelPath != '': 
+            torch.save(self.siamese_model, self.modelPath)
 
-    # def predict():
-    #     pass
+
+    def predict(self, X):
+        if self.modelPath != '': 
+            self.siamese_model = torch.load(self.modelPath)
+            self.siamese_model.eval()
+        return self.siamese_model.fc(X)
 
     def getPytorchModel(self):
         return self.siamese_model if self.siamese_model is not None else None
@@ -191,21 +204,23 @@ class cinet(sklearn.base.BaseEstimator):
                     curr_dropout = 0
                 else:
                     curr_dropout = dropout
-                if batchnorm:
-                    layer1 = nn.Sequential(
-                        nn.Linear(layers_size[i], layers_size[i + 1]),
-                        nn.LeakyReLU(),
-                        nn.BatchNorm1d(layers_size[i + 1]),
-                        nn.Dropout(curr_dropout)
-                    )
+                
+                # define block with FC layer
+                block = [nn.Linear(layers_size[i], layers_size[i + 1])]
+                
+                # activation layer
+                if i == len(layers_size) - 2:
+                    block.append(nn.Sigmoid())
                 else:
-                    layer1 = nn.Sequential(
-                        nn.Linear(layers_size[i], layers_size[i + 1]),
-                        nn.LeakyReLU(),
-                        # Residual(layers_size[i], layers_size[i+1], last_layer = (i+1 == len(layers_size) - 1)),
-                        nn.Dropout(curr_dropout)
-                    )
-                self.layers.append(layer1)
+                    block.append(nn.LeakyReLU())
+                
+                # batchnorm layer
+                if batchnorm:
+                    block.append(nn.BatchNorm1d(layers_size[i + 1]))
+                
+                # dropout layer
+                block.append(nn.Dropout(curr_dropout))
+                self.layers.append(nn.Sequential(*block))
 
         def forward(self, x):
             x = x.view(x.size(0), -1)
@@ -500,6 +515,7 @@ class DeepCINET(pl.LightningModule):
             self.fc = cinet.FullyConnectedLinear(self.layers_size, self.dropout, self.batchnorm)
         else:
             self.fc = cinet.FullyConnected(self.layers_size, self.dropout, self.batchnorm)
+        
         self.log_model_parameters()
 
     def forward(self, geneA, geneB):

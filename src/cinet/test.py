@@ -1,10 +1,19 @@
-print("starting")
+# TRAIN TEST
 import torch
 from cinet import *
 import numpy as np
-model = cinet()
+
+model = cinet('cinet2.ckpt')
 model.set_params()
 X = getCINETSampleInput()
 model.fit(X)
-py_model = model.getPytorchModel()
-test = np.array(X.iloc[4].values[2:], dtype=np.float16)
+
+# X = model.gene_data.gene_exprs
+
+for i in range(1,30): 
+    test_tensor = torch.tensor(np.array(model.gene_data.gene_exprs[i], dtype=np.float32).reshape(-1,1)).T
+    model.predict(test_tensor)
+
+# py_model = model.getPytorchModel()
+
+
