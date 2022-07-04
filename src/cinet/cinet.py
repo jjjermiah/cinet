@@ -27,8 +27,9 @@ from ray.tune.suggest.bohb import TuneBOHB
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining, HyperBandForBOHB
 from ray.tune.integration.pytorch_lightning import TuneCallback
 
-def getCINETSampleInput(): 
-    return pd.read_csv('./gene_CCLE_rnaseq_5-Fluorouracil_response.csv')
+def getCINETSampleInput(file='./gene_CCLE_rnaseq_Bortezomib_response.csv'): 
+    # return pd.read_csv('./gene_CCLE_rnaseq_5-Fluorouracil_response.csv')
+    return pd.read_csv(file)
 
 class cinet(sklearn.base.BaseEstimator):
     def __init__(self, modelPath=''):
@@ -48,7 +49,8 @@ class cinet(sklearn.base.BaseEstimator):
         self.sc_milestones = params['sc_milestones'] if 'sc_milestones' in params else [1,2,5,15,30]
         self.sc_gamma = params['sc_gamma'] if 'sc_gamma' in params else 0.35
         self.delta = params['delta'] if 'delta' in params else 0
-        self.dropout = params['dropout'] if 'dropout' in params else 0
+        self.dropout = params['dropout'] if 'dropout' in params else 0.4
+        self.learning_rate = params['learning_rate'] if 'learning_rate' in params else 0.01
 
         # Setup parsers
         self.parser = argparse.ArgumentParser()
@@ -99,8 +101,8 @@ class cinet(sklearn.base.BaseEstimator):
             'hidden_two': 512,
             'hidden_three': 128,
             'hidden_four': 0,  # TODO: Figure out why
-            'dropout': 0.4,
-            'lr': 0.01,
+            'dropout': self.dropout,
+            'lr': self.learning_rate,
             'batchnorm': True,
             # 'dat_size': self.gene_data.gene_num(),
         }
@@ -146,7 +148,7 @@ class cinet(sklearn.base.BaseEstimator):
                           gpus=1,
                           # NEW LINE I ADDED - KEVIN
                           # to run on my computer
-                          accelerator='cpu',
+                          accelerator='gpu',
                           accumulate_grad_batches=self.hparams.accumulate_grad_batches,
                           # distributed_backend='dp',
                           weights_summary='full',
@@ -209,17 +211,16 @@ class cinet(sklearn.base.BaseEstimator):
                 block = [nn.Linear(layers_size[i], layers_size[i + 1])]
                 
                 # activation layer
-                if i == len(layers_size) - 2:
+                if i == len(layers_size) - 2: #last layer
                     block.append(nn.Sigmoid())
                 else:
                     block.append(nn.LeakyReLU())
-                
-                # batchnorm layer
-                if batchnorm:
-                    block.append(nn.BatchNorm1d(layers_size[i + 1]))
-                
-                # dropout layer
-                block.append(nn.Dropout(curr_dropout))
+                    # batchnorm layer 
+                    if batchnorm:
+                        block.append(nn.BatchNorm1d(layers_size[i + 1]))
+                    # dropout layer
+                    block.append(nn.Dropout(curr_dropout))
+
                 self.layers.append(nn.Sequential(*block))
 
         def forward(self, x):
@@ -515,7 +516,7 @@ class DeepCINET(pl.LightningModule):
             self.fc = cinet.FullyConnectedLinear(self.layers_size, self.dropout, self.batchnorm)
         else:
             self.fc = cinet.FullyConnected(self.layers_size, self.dropout, self.batchnorm)
-        
+        print(self.fc)
         self.log_model_parameters()
 
     def forward(self, geneA, geneB):
