@@ -27,19 +27,6 @@ from ray.tune.suggest.bohb import TuneBOHB
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining, HyperBandForBOHB
 from ray.tune.integration.pytorch_lightning import TuneCallback
 
-# HELPER SUB-CLASSES AND SUB-FUNCTIONS
-def verifyType(obj, type):
-    if not isinstance(obj, type):
-        # Do something, throw an error
-        pass
-
-def add_argument_group(self, name):
-    arg = self.parser.add_argument_group(name)
-    self.arg_lists.append(arg)
-    return arg
-
-def count_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 class FullyConnected(nn.Module):
     """
@@ -47,7 +34,7 @@ class FullyConnected(nn.Module):
     to the DeepCINET method.
     """
     def __init__(self, layers_size, dropout, batchnorm):
-        super(cinet.FullyConnected, self).__init__()
+        super(FullyConnected, self).__init__()
         self.layers = nn.ModuleList()
         for i in range(len(layers_size) - 1):
             if i == 0:
@@ -203,7 +190,7 @@ class TuneReportCallback(TuneCallback):
     def __init__(self,
                     metrics=None,
                     on="validation_end"):
-        super(cinet.TuneReportCallback, self).__init__(on)
+        super(TuneReportCallback, self).__init__(on)
         if isinstance(metrics, str):
             metrics = [metrics]
         self._metrics = metrics
@@ -241,14 +228,14 @@ def deepCinet_tune(self, config):
     hdict = vars(self.args)
     hparams = argparse.Namespace(**hdict)
 
-    gene_data = cinet.Dataset(self.dataSet, False)
+    gene_data = Dataset(self.dataSet, False)
     train_idx, val_idx = train_test_split(list(range(gene_data.__len__())), test_size=0.2)
 
-    train_dl = cinet.Create_Dataloader(
-        cinet.Dataset(self.dataSet, True, delta=0, idxs=train_idx),
+    train_dl = Create_Dataloader(
+        Dataset(self.dataSet, True, delta=0, idxs=train_idx),
         hparams, shuffle_ind=True)
-    val_dl = cinet.Create_Dataloader(
-        cinet.Dataset(self.dataSet, True, delta=0, idxs=val_idx),  # is_train = true here to get pairs
+    val_dl = Create_Dataloader(
+        Dataset(self.dataSet, True, delta=0, idxs=val_idx),  # is_train = true here to get pairs
         hparams, shuffle_ind=True)
 
     siamese_model = DeepCINET(hparams=hparams, config=config)
@@ -264,7 +251,7 @@ def deepCinet_tune(self, config):
                         num_sanity_val_steps=0,
                         # auto_find_lr=hparams.auto_find_lr,
                         callbacks=[EarlyStopping(monitor='val_ci', patience=10, mode="max"),
-                                    cinet.TuneReportCallback({
+                                    TuneReportCallback({
                                         "best_loss": "best_loss",
                                         "CI": "best_val_ci"
                                     }, on="validation_end")],
@@ -277,7 +264,7 @@ def deepCinet_tune(self, config):
 def tune_DeepCINET_bohb(self, num_samples=1000):
     hdict = vars(self.args)
     hparams = argparse.Namespace(**hdict)
-    gene_data = cinet.Dataset(self.dataSet, False)
+    gene_data = Dataset(self.dataSet, False)
     config = {
         "hidden_one": tune.choice([32, 128, 512]),
         "hidden_two": tune.choice([32, 128, 512]),
@@ -362,9 +349,11 @@ class DeepCINET(pl.LightningModule):
         self.linear = linear
 
         if self.linear:
-            self.fc = cinet.FullyConnectedLinear(self.layers_size, self.dropout, self.batchnorm)
+            # self.fc = FullyConnectedLinear(self.layers_size, self.dropout, self.batchnorm)
+            # TODO: implement this
+            pass
         else:
-            self.fc = cinet.FullyConnected(self.layers_size, self.dropout, self.batchnorm)
+            self.fc = FullyConnected(self.layers_size, self.dropout, self.batchnorm)
         print(self.fc)
         self.log_model_parameters()
 
@@ -517,8 +506,8 @@ class DeepCINET(pl.LightningModule):
 
     def log_model_parameters(self):
         print("PARAMETERS**********************************************")
-        print("Convolution layer parameters: %d" % (cinet.count_parameters(self.convolution)))
-        print("FC layer parameters: %d" % (cinet.count_parameters(self.fc)))
+        print("Convolution layer parameters: %d" % (self.count_parameters(self.convolution)))
+        print("FC layer parameters: %d" % (self.count_parameters(self.fc)))
         print("********************************************************")
 
     @staticmethod
@@ -549,3 +538,7 @@ class DeepCINET(pl.LightningModule):
         parser.add_argument('--sc-gamma', type=float, default=ref.sc_gamma)
         # parser.add_argument('--use-exp', action='store_true', default=config.USE_IMAGES)
         return parser
+    
+    @staticmethod
+    def count_parameters(model):
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)

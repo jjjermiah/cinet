@@ -7,6 +7,8 @@ import pandas as pd
 import json
 import sys
 from io import StringIO
+from lifelines.utils import concordance_index
+
 
 
 model = cinet('cinet2.ckpt')
@@ -51,7 +53,7 @@ with open('data.json', 'w') as fp:
 #####
 from scipy import stats
 
-test_cv = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/gene_gCSI_rnaseq_Docetaxel_response.csv')
+test_cv = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/gene_gCSI_rnaseq_Erlotinib_response.csv')
 temp_list = model.predict(torch.FloatTensor(test_cv.iloc[:,2:].values)).detach().numpy().tolist()
 final_list = []
 for t in temp_list: 
@@ -62,6 +64,7 @@ c2 = final_list
 c1 = np.asarray(test_cv.iloc[:,1]) 
 
 stats.spearmanr(c1,c2)
+concordance_index(c1,c2)
 ###
 
 
