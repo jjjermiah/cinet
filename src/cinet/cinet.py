@@ -27,11 +27,24 @@ def getCINETSampleInput(file='./gene_CCLE_rnaseq_Bortezomib_response.csv'):
     return pd.read_csv(file)
 
 class cinet(sklearn.base.BaseEstimator):
-    def __init__(self, modelPath=''):
-        # super.__init__() # Is this necessary?
+    def __init__(self, modelPath='',
+    batch_size=256, num_workers=8, folds=5, use_folds=5, momentum=5, 
+    weight_decay=5, sc_milestones=[1,2,5,15,30], sc_gamma=0.35,
+    delta=0, dropout=0.4, learning_rate=0.01):
         self.arg_lists = []
         self._estimator_type = 'classifier'
         self.modelPath = modelPath
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.folds = folds
+        self.use_folds = use_folds
+        self.momentum = momentum
+        self.weight_decay = weight_decay
+        self.sc_milestones = sc_milestones
+        self.sc_gamma = sc_gamma
+        self.delta = delta
+        self.dropout = dropout
+        self.learning_rate = learning_rate
 
 
     def set_params(self, **params):
@@ -47,7 +60,8 @@ class cinet(sklearn.base.BaseEstimator):
         self.dropout = params['dropout'] if 'dropout' in params else 0.4
         self.learning_rate = params['learning_rate'] if 'learning_rate' in params else 0.01
 
-        # Setup parsers
+    def fit(self, X=None, y=None):
+         # Setup parsers
         self.parser = argparse.ArgumentParser()
         data_arg = self.add_argument_group('Data')
 
@@ -102,7 +116,8 @@ class cinet(sklearn.base.BaseEstimator):
             # 'dat_size': self.gene_data.gene_num(),
         }
 
-    def fit(self, X=None, y=None):
+
+
         self.dataSet = X
         self.gene_data = Dataset(self.dataSet, False)
         train_idx, val_idx = train_test_split(list(range(self.gene_data.__len__())), test_size=0.2)
