@@ -1,4 +1,5 @@
 from .models import *
+from scipy import stats
 
 from random import randint
 import sklearn
@@ -6,31 +7,25 @@ import pandas as pd
 import numpy as np
 import argparse
 
+from lifelines.utils import concordance_index
+
 ## FIXME:: modularize these imports and remove as many as possible!
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 
 import torch
-import torch.nn as nn
 import torch.utils.data
 
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.utilities.cloud_io import load as pl_load
-
-
-def getCINETSampleInput(file='./gene_CCLE_rnaseq_Bortezomib_response.csv'): 
-    # return pd.read_csv('./gene_CCLE_rnaseq_5-Fluorouracil_response.csv')
-    return pd.read_csv(file)
 
 class cinet(sklearn.base.BaseEstimator):
     def __init__(self, modelPath='',
     batch_size=256, num_workers=8, folds=5, use_folds=5, momentum=5, 
     weight_decay=5, sc_milestones=[1,2,5,15,30], sc_gamma=0.35,
-    delta=0, dropout=0.4, learning_rate=0.01):
+    delta=0, dropout=0.4, learning_rate=0.01, device='cpu'):
         self.arg_lists = []
         self._estimator_type = 'classifier'
         self.modelPath = modelPath
@@ -45,9 +40,13 @@ class cinet(sklearn.base.BaseEstimator):
         self.delta = delta
         self.dropout = dropout
         self.learning_rate = learning_rate
+        self.device = device
 
 
     def set_params(self, **params):
+        # I am hard-coding values twice here. Maybe I can hold everything in a hashmap at the 
+        # class level to only update relevant parameters?
+        # THIS IS NOT A GOOD APPROACH BECUASE IT RESETS ALL VALUES!!!
         self.batch_size = params['batch_size'] if 'batch_size' in params else 256
         self.num_workers = params['num_workers'] if 'num_workers' in params else 8
         self.folds = params['folds'] if 'folds' in params else 5
@@ -59,6 +58,7 @@ class cinet(sklearn.base.BaseEstimator):
         self.delta = params['delta'] if 'delta' in params else 0
         self.dropout = params['dropout'] if 'dropout' in params else 0.4
         self.learning_rate = params['learning_rate'] if 'learning_rate' in params else 0.01
+        self.device = params['device'] if 'device' in params else 'cpu'
 
     def fit(self, X=None, y=None):
          # Setup parsers
@@ -117,8 +117,19 @@ class cinet(sklearn.base.BaseEstimator):
         }
 
 
+        # Check if both data have same # of rows 
+        if len(X) != len(y):
+            raise Exception("X and y values are not of the same length")
+        
 
-        self.dataSet = X
+        combined_df = pd.concat([X,y],axis=1)
+        combined_df.columns.values[-1] = 'target'
+
+        # Check if the combined dataframe is the right size
+        if len(combined_df) != len(X): 
+            raise Exception("X and y values must have the same indices")
+
+        self.dataSet = combined_df
         self.gene_data = Dataset(self.dataSet, False)
         train_idx, val_idx = train_test_split(list(range(self.gene_data.__len__())), test_size=0.2)
 
@@ -128,27 +139,28 @@ class cinet(sklearn.base.BaseEstimator):
 
         # for delta in [0, 0.07491282]:
         train_dl = torch.utils.data.DataLoader(
-            Dataset(X, True, self.delta, train_idx),
+            Dataset(combined_df, True, self.delta, train_idx),
             batch_size=self.hparams.batch_size, 
             shuffle=True, 
             num_workers=self.hparams.num_workers,
         )
 
         val_dl = torch.utils.data.DataLoader(
-            Dataset(X, True, self.delta, val_idx),
+            Dataset(combined_df, True, self.delta, val_idx),
             batch_size=self.hparams.batch_size, 
             shuffle=True, 
             num_workers=self.hparams.num_workers,
         )
 
-        filename_log = f'Vorinostat-delta={self.delta:.3f}'
-        checkpoint_callback = ModelCheckpoint(
-            monitor='val_ci',
-            dirpath='./Saved_models/DeepCINET/rnaseq/',
-            filename=filename_log,
-            save_top_k=1,
-            mode='max'
-        )
+        # TODO: Remove this? Hard-coded stuff here. 
+        # filename_log = f'Vorinostat-delta={self.delta:.3f}'
+        # checkpoint_callback = ModelCheckpoint(
+        #     monitor='val_ci',
+        #     dirpath='./Saved_models/DeepCINET/rnaseq/',
+        #     filename=filename_log,
+        #     save_top_k=1,
+        #     mode='max'
+        # )
 
         self.siamese_model = DeepCINET(hparams=self.hparams, config=self.config)
         trainer = Trainer(min_epochs=self.hparams.min_epochs,
@@ -156,17 +168,15 @@ class cinet(sklearn.base.BaseEstimator):
                           min_steps=self.hparams.min_steps,
                           max_steps=self.hparams.max_steps,
                           gpus=1,
-                          # NEW LINE I ADDED - KEVIN
-                          # to run on my computer
-                          accelerator='gpu',
+                          accelerator=self.device,
                           accumulate_grad_batches=self.hparams.accumulate_grad_batches,
                           # distributed_backend='dp',
                           weights_summary='full',
                           # enable_benchmark=False,
                           num_sanity_val_steps=0,
                           # auto_find_lr=hparams.auto_find_lr,
-                          callbacks=[EarlyStopping(monitor='val_ci', mode="max", patience=5),
-                                     checkpoint_callback],
+                        #   callbacks=[EarlyStopping(monitor='val_ci', mode="max", patience=5),
+                        #              checkpoint_callback],
                           check_val_every_n_epoch=self.hparams.check_val_every_n_epoch)
         # overfit_pct=hparams.overfit_pct)
 
@@ -177,6 +187,30 @@ class cinet(sklearn.base.BaseEstimator):
             torch.save(self.siamese_model, self.modelPath)
 
 
+    def score(self, X=None, y=None):
+        temp_list = self.predict(X).detach().numpy().tolist()
+        final_list = []
+        for t in temp_list: 
+            final_list.append(t[0])
+        c2 = final_list
+
+        # stats.spearmanr(y,c2)
+        concordance_index(y,c2)
+
+    # HELPER SUB-CLASSES AND SUB-FUNCTIONS
+    
+    def verifyType(obj, type, name=''):
+        if not isinstance(obj, type):
+            raise TypeError(((name+'\t') if name != '' else '') + 'expected ')
+
+    def add_argument_group(self, name):
+        arg = self.parser.add_argument_group(name)
+        self.arg_lists.append(arg)
+        return arg
+
+
+    # DEBUG TOOLS 
+
     def predict(self, X):
         if self.modelPath != '': 
             self.siamese_model = torch.load(self.modelPath)
@@ -186,19 +220,8 @@ class cinet(sklearn.base.BaseEstimator):
     def getPytorchModel(self):
         return self.siamese_model if self.siamese_model is not None else None
     
-    def getFC(self):
-        return self.fc if self.fc is not None else None
 
 
-    # HELPER SUB-CLASSES AND SUB-FUNCTIONS
-    def verifyType(obj, type):
-        if not isinstance(obj, type):
-            # Do something, throw an error
-            pass
-
-    def add_argument_group(self, name):
-        arg = self.parser.add_argument_group(name)
-        self.arg_lists.append(arg)
-        return arg
+    
 
    

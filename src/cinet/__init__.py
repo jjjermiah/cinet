@@ -2,4 +2,4 @@
 from importlib.metadata import version
 __version__ = version("cinet")
 
-from .cinet import cinet, getCINETSampleInput
+from .cinet import cinet

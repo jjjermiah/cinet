@@ -75,8 +75,10 @@ class Dataset(torch.utils.data.Dataset):
         if idxs is not None:
             self.gene_exprs = self.gene_exprs.iloc[idxs]
         self.drug_resps = self.gene_exprs["target"].to_numpy()
-        self.cell_lines = self.gene_exprs["cell_line"].to_numpy()
-        self.gene_exprs = self.gene_exprs.drop(["target", "cell_line"], axis=1).to_numpy()
+        # self.cell_lines = self.gene_exprs["cell_line"].to_numpy()
+        self.cell_lines = self.gene_exprs.index.values.tolist()
+        # self.gene_exprs = self.gene_exprs.drop(["target", "cell_line"], axis=1).to_numpy()
+        self.gene_exprs = self.gene_exprs.drop(["target"], axis=1).to_numpy()
         self.gene_exprs = (self.gene_exprs - np.mean(self.gene_exprs, axis=0)) / np.std(self.gene_exprs, axis=0)
 
         self._is_train = is_train
@@ -104,10 +106,10 @@ class Dataset(torch.utils.data.Dataset):
     def test_item(self, idx):
         gene = self._load_item(idx)
         response = self._load_response(idx)
-        cell_line = self._load_cell_line(idx)
+        # cell_line = self._load_cell_line(idx)
         return {'gene': gene,
                 'response': response,
-                'cell_line': cell_line}
+                'cell_line': idx}
 
     def _load_item(self, idx):
         """ Function to load the features of a cell line
@@ -123,9 +125,9 @@ class Dataset(torch.utils.data.Dataset):
         response = torch.tensor(response.copy(), dtype=torch.float32)
         return response
 
-    def _load_cell_line(self, idx):
-        cell_lines_selected = self.cell_lines[idx]
-        return cell_lines_selected
+    # def _load_cell_line(self, idx):
+    #     cell_lines_selected = self.cell_lines[idx]
+    #     return cell_lines_selected
 
     def _build_pairs(self, delta):
         ''' build pairs of indices and labels for training data
