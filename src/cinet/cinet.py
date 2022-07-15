@@ -162,7 +162,7 @@ class cinet(sklearn.base.BaseEstimator):
         #     mode='max'
         # )
 
-        self.siamese_model = DeepCINET(hparams=self.hparams, config=self.config)
+        self.siamese_model = DeepCINET(hparams=self.hparams, config=self.config, linear=True)
         trainer = Trainer(min_epochs=self.hparams.min_epochs,
                           max_epochs=self.hparams.max_epochs,
                           min_steps=self.hparams.min_steps,
@@ -186,22 +186,26 @@ class cinet(sklearn.base.BaseEstimator):
         if self.modelPath != '': 
             torch.save(self.siamese_model, self.modelPath)
 
+    def predict(self, X):
+        if type(X) == pd.DataFrame: 
+            X = torch.FloatTensor(X.values)
+        if self.modelPath != '': 
+            self.siamese_model = torch.load(self.modelPath)
+            self.siamese_model.eval()
+        return self.siamese_model.fc(X)
 
     def score(self, X=None, y=None):
+        if type(X) == pd.DataFrame: 
+            X = torch.FloatTensor(X.values)
         temp_list = self.predict(X).detach().numpy().tolist()
         final_list = []
         for t in temp_list: 
             final_list.append(t[0])
-        c2 = final_list
 
-        # stats.spearmanr(y,c2)
-        concordance_index(y,c2)
+        # return stats.spearmanr(y,final_list)
+        return concordance_index(y,final_list)
 
     # HELPER SUB-CLASSES AND SUB-FUNCTIONS
-    
-    def verifyType(obj, type, name=''):
-        if not isinstance(obj, type):
-            raise TypeError(((name+'\t') if name != '' else '') + 'expected ')
 
     def add_argument_group(self, name):
         arg = self.parser.add_argument_group(name)
@@ -210,13 +214,7 @@ class cinet(sklearn.base.BaseEstimator):
 
 
     # DEBUG TOOLS 
-
-    def predict(self, X):
-        if self.modelPath != '': 
-            self.siamese_model = torch.load(self.modelPath)
-            self.siamese_model.eval()
-        return self.siamese_model.fc(X)
-
+    
     def getPytorchModel(self):
         return self.siamese_model if self.siamese_model is not None else None
     

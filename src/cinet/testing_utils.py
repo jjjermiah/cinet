@@ -8,10 +8,10 @@ import json
 import sys
 from io import StringIO
 from lifelines.utils import concordance_index
+from sklearn.preprocessing import StandardScaler
 
 
 model = cinet(modelPath='cinet2.ckpt', device='gpu')
-# model.set_params()
 
 file_list = os.listdir(r'/home/gputwo/bhklab/kevint/cinet/data/')
 
@@ -19,6 +19,21 @@ file_list = os.listdir(r'/home/gputwo/bhklab/kevint/cinet/data/')
 df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/data/' + file_list[0]).set_index('cell_line')
 X = df.iloc[:,2:]
 y = df.iloc[:,1]
+
+### FIT THE MODEL 
+model.fit(X,y)
+
+### TEST THE MODEL 
+df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/gene_gCSI_rnaseq_Erlotinib_response.csv').iloc[:,1:]
+df.values[:] =  StandardScaler().fit_transform(df)
+model.score(df.iloc[:,1:], df.iloc[:,0])
+
+
+
+
+
+#######
+
 
 data = dict()
 
