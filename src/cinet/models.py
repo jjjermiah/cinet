@@ -64,6 +64,21 @@ class FullyConnected(nn.Module):
             x = layer(x)
         return x
 
+class FullyConnectedLinear(nn.Module):
+    def __init__(self, layers_size, dropout, batchnorm):
+        super(FullyConnectedLinear, self).__init__()
+        self.layers = nn.Sequential(
+        nn.Linear(layers_size[0], layers_size[1])
+      )
+
+
+    def forward(self, x):
+      '''Forward pass'''
+      x = x.view(x.size(0), -1)
+      for layer in self.layers:
+          x = layer(x)
+      return x
+
 class Dataset(torch.utils.data.Dataset):
     """Data set class which returns a pytorch data set object
         Returns a iterable data set object extending from the pytorch dataset
@@ -351,12 +366,10 @@ class DeepCINET(pl.LightningModule):
         self.linear = linear
 
         if self.linear:
-            # self.fc = FullyConnectedLinear(self.layers_size, self.dropout, self.batchnorm)
-            # TODO: implement this
+            self.fc = FullyConnectedLinear(self.layers_size, self.dropout, self.batchnorm)
             pass
         else:
             self.fc = FullyConnected(self.layers_size, self.dropout, self.batchnorm)
-        print(self.fc)
         self.log_model_parameters()
 
     def forward(self, geneA, geneB):
