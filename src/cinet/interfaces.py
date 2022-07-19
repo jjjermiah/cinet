@@ -38,15 +38,16 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
     batch_size=256,
     num_workers=8,
     folds=5, 
-    use_folds=5, 
-    momentum=5, 
-    weight_decay=5, 
+    use_folds=False, 
+    momentum=5.0, 
+    weight_decay=5.0, 
     sc_milestones=[1,2,5,15,30], 
     sc_gamma=0.35,
-    delta=0, 
+    delta=0.0, 
     dropout=0.4, 
     learning_rate=0.01, 
-    device='cpu'):
+    device='cpu',
+    seed=420):
         self.arg_lists = []
         self._estimator_type = 'classifier'
         self.modelPath = modelPath
@@ -62,161 +63,123 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
         self.dropout = dropout
         self.learning_rate = learning_rate
         self.device = device
+        self.seed = seed
 
-    def set_params(self, **params): 
-        if 'batch_size' in params: 
-            assert isinstance(params['batch_size'], int), 'batch_size must be of type int'
-            self.batch_size = params['batch_size']
-        if 'num_workers' in params: 
-            assert isinstance(params['num_workers'], int), 'num_workers must be of type int'
-            self.num_workers = params['num_workers']
-        if 'folds' in params: 
-            assert isinstance(params['folds'], int), 'folds must be of type int'
-            self.folds = params['folds']
-        if 'use_folds' in params: 
-            assert isinstance(params['use_folds'], bool), 'use_folds must be of type bool'
-            self.use_folds = params['use_folds']
-        if 'momentum' in params: 
-            assert isinstance(params['momentum'], float), 'momentum must be of type float'
-            self.momentum = params['momentum']
-        if 'weight_decay' in params: 
-            assert isinstance(params['weight_decay'], float), 'weight_decay must be of type float'
-            self.weight_decay = params['weight_decay']
-        if 'sc_milestones' in params: 
-            assert isinstance(params['sc_milestones'], list), 'sc_milestones must be of type list'
-            self.sc_milestones = params['sc_milestones']
-        if 'sc_gamma' in params: 
-            assert isinstance(params['sc_gamma'], float), 'sc_gamma must be of type float'
-            self.sc_gamma = params['sc_gamma']
-        if 'delta' in params: 
-            assert isinstance(params['delta'], float), 'delta must be of type float'
-            self.delta = params['delta']
-        if 'dropout' in params: 
-            assert isinstance(params['dropout'], float), 'dropout must be of type float'
-            self.dropout = params['dropout']
-        if 'learning_rate' in params: 
-            assert isinstance(params['learning_rate'], float), 'learning_rate must be of type float'
-            self.learning_rate = params['learning_rate']
-        if 'device' in params: 
-            assert isinstance(params['device'], str), 'device must be of type str'
-            assert isinstance(params['device'] in ['cpu', 'gpu']), 'device must be either "cpu" or "gpu"'
-            self.device = params['device']
+
+    def _validate_params(self): 
+        assert isinstance(self.batch_size, int), 'batch_size must be of type int'
+        assert isinstance(self.num_workers, int), 'num_workers must be of type int'
+        assert isinstance(self.folds, int), 'folds must be of type int'
+        assert isinstance(self.use_folds, bool), 'use_folds must be of type bool'
+        assert isinstance(self.momentum, float), 'momentum must be of type float'
+        assert isinstance(self.weight_decay, float), 'weight_decay must be of type float'
+        assert isinstance(self.sc_milestones, list), 'sc_milestones must be of type list'
+        assert isinstance(self.sc_gamma, float), 'sc_gamma must be of type float'
+        assert isinstance(self.delta, float), 'delta must be of type float'
+        assert isinstance(self.dropout, float), 'dropout must be of type float'
+        assert isinstance(self.learning_rate, float), 'learning_rate must be of type float'
+        assert isinstance(self.device, str), 'device must be of type str'
+        assert (self.device in ['cpu', 'gpu']), 'device must be either "cpu" or "gpu"'
+        assert isinstance(self.seed, int), 'seed must be of type int'
+
 
     def fit(self, X=None, y=None): 
-        # Setup parsers
-            self.parser = argparse.ArgumentParser()
-            data_arg = self.add_argument_group('Data')
+        self._validate_params()
+        print("🚀🚀🚀🚀TESTING WITH HYPERPARAMETERS🚀🚀🚀🚀")
+        print("delta", self.delta)
 
-            ## DATA ############
-            data_arg.add_argument("--num-workers", default=self.num_workers, type=int)
-            data_arg.add_argument("--batch-size", default=self.batch_size, type=int)
-            data_arg.add_argument("--folds", default=self.folds, type=int)
-            data_arg.add_argument('--use-volume-cache', action='store_true')
-            data_arg.add_argument('--accumulate-grad-batches', default=1, type=int)
+        self.hyperparams = {
+            "num_workers": self.num_workers, 
+            "batch_size" : self.batch_size, 
+            "folds" : self.folds, 
+            "accumulate_grad_batches": 1, 
+            "min_epochs": 0, 
+            "min_steps" : None,
+            "max_epochs" : 12, 
+            "max_steps" : None, 
+            "check_val_every_n_epoch" : 1, 
+            "gpus" : 0,
+            "overfit_pct" : 0,
+            "seed" : self.seed,
+            "sc_milestones" : self.sc_milestones,
+            "sc_gamma" : self.sc_gamma,
+        }
 
-            ## TRAINING ########
-            train_arg = self.add_argument_group('Train')
-            train_arg.add_argument("--min-epochs", default=0, type=int)
-            train_arg.add_argument("--min-steps", default=None, type=int)
-            train_arg.add_argument("--max-epochs", default=12, type=int)  # 12 for tuning
-            train_arg.add_argument("--max-steps", default=None, type=int)
-            train_arg.add_argument("--check-val-every-n-epoch", default=1, type=int)
-            train_arg.add_argument('--auto-find-lr', action='store_true', default=False)
-            train_arg.add_argument("--gpus", default=0, type=int)
-            ####################
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+        np.random.seed(self.hyperparams["seed"])
+        torch.manual_seed(self.hyperparams["seed"])
 
-            ## DEBUG ###########
-            debug_arg = self.add_argument_group('Debug')
-            debug_arg.add_argument("--overfit-pct", default=0, type=float)
-            ####################
+        self.config = self.getConfig()
 
-            ## MISC ############
-            misc_arg = self.add_argument_group('Misc')
-            misc_arg.add_argument("--seed", default=520, type=int)
-            ####################
+        # Check if both data have same # of rows 
+        if len(X) != len(y):
+            raise Exception("X and y values are not of the same length")
+        
 
-            self.parser = DeepCINET.add_model_specific_args(self, self.parser)
-            self.args, self.unparsed = self.parser.parse_known_args()
+        combined_df = pd.concat([X,y],axis=1)
+        combined_df.columns.values[-1] = 'target'
 
-            torch.backends.cudnn.benchmark = False
-            torch.backends.cudnn.deterministic = True
-            np.random.seed(self.args.seed)
-            torch.manual_seed(self.args.seed)
+        print(combined_df.shape, combined_df.columns)
 
-            hdict = vars(self.args)
-            self.hparams = argparse.Namespace(**hdict)
+        # Check if the combined dataframe is the right size
+        if len(combined_df) != len(X): 
+            raise Exception("X and y values must have the same indices")
 
+        self.dataSet = combined_df
+        self.gene_data = Dataset(self.dataSet, False, self.batch_size)
+        train_idx, val_idx = train_test_split(list(range(self.gene_data.__len__())), test_size=0.2)
 
-            self.config = self.getConfig()
+        self.config['dat_size'] = self.gene_data.gene_exprs.shape[1]
 
-            # Check if both data have same # of rows 
-            if len(X) != len(y):
-                raise Exception("X and y values are not of the same length")
-            
+        train_dl = torch.utils.data.DataLoader(
+            Dataset(combined_df, True, self.batch_size, self.delta, train_idx),
+            batch_size=self.hyperparams['batch_size'], 
+            shuffle=True, 
+            num_workers=self.hyperparams['num_workers'],
+        )
 
-            combined_df = pd.concat([X,y],axis=1)
-            combined_df.columns.values[-1] = 'target'
+        val_dl = torch.utils.data.DataLoader(
+            Dataset(combined_df, True, self.batch_size, self.delta, val_idx),
+            batch_size=self.hyperparams['batch_size'], 
+            shuffle=True, 
+            num_workers=self.hyperparams['num_workers'],
+        )
 
-            # Check if the combined dataframe is the right size
-            if len(combined_df) != len(X): 
-                raise Exception("X and y values must have the same indices")
+        # TODO: Remove this? Hard-coded stuff here. 
+        # filename_log = f'Vorinostat-delta={self.delta:.3f}'
+        # checkpoint_callback = ModelCheckpoint(
+        #     monitor='val_ci',
+        #     dirpath='./Saved_models/DeepCINET/rnaseq/',
+        #     filename=filename_log,
+        #     save_top_k=1,
+        #     mode='max'
+        # )
 
-            self.dataSet = combined_df
-            self.gene_data = Dataset(self.dataSet, False)
-            train_idx, val_idx = train_test_split(list(range(self.gene_data.__len__())), test_size=0.2)
+        self.siamese_model = DeepCINET(hyperparams=self.hyperparams, config=self.config, linear=self.isLinear())
+        trainer = Trainer(min_epochs=self.hyperparams['min_epochs'],
+                        max_epochs=self.hyperparams['max_epochs'],
+                        min_steps=self.hyperparams['min_steps'],
+                        max_steps=self.hyperparams['max_steps'],
+                        gpus=1,
+                        devices=1,
+                        accelerator=self.device,
+                        accumulate_grad_batches=self.hyperparams['accumulate_grad_batches'],
+                        # distributed_backend='dp',
+                        weights_summary='full',
+                        # enable_benchmark=False,
+                        num_sanity_val_steps=0,
+                        # auto_find_lr=hparams.auto_find_lr,
+                        #   callbacks=[EarlyStopping(monitor='val_ci', mode="max", patience=5),
+                        #              checkpoint_callback],
+                        check_val_every_n_epoch=self.hyperparams['check_val_every_n_epoch'])
+        # overfit_pct=hparams.overfit_pct)
 
-            self.config['dat_size'] = self.gene_data.gene_exprs.shape[1]
-
-            models = []
-
-            # for delta in [0, 0.07491282]:
-            train_dl = torch.utils.data.DataLoader(
-                Dataset(combined_df, True, self.delta, train_idx),
-                batch_size=self.hparams.batch_size, 
-                shuffle=True, 
-                num_workers=self.hparams.num_workers,
-            )
-
-            val_dl = torch.utils.data.DataLoader(
-                Dataset(combined_df, True, self.delta, val_idx),
-                batch_size=self.hparams.batch_size, 
-                shuffle=True, 
-                num_workers=self.hparams.num_workers,
-            )
-
-            # TODO: Remove this? Hard-coded stuff here. 
-            # filename_log = f'Vorinostat-delta={self.delta:.3f}'
-            # checkpoint_callback = ModelCheckpoint(
-            #     monitor='val_ci',
-            #     dirpath='./Saved_models/DeepCINET/rnaseq/',
-            #     filename=filename_log,
-            #     save_top_k=1,
-            #     mode='max'
-            # )
-
-            self.siamese_model = DeepCINET(hparams=self.hparams, config=self.config, linear=self.isLinear())
-            trainer = Trainer(min_epochs=self.hparams.min_epochs,
-                            max_epochs=self.hparams.max_epochs,
-                            min_steps=self.hparams.min_steps,
-                            max_steps=self.hparams.max_steps,
-                            gpus=1,
-                            accelerator=self.device,
-                            accumulate_grad_batches=self.hparams.accumulate_grad_batches,
-                            # distributed_backend='dp',
-                            weights_summary='full',
-                            # enable_benchmark=False,
-                            num_sanity_val_steps=0,
-                            # auto_find_lr=hparams.auto_find_lr,
-                            #   callbacks=[EarlyStopping(monitor='val_ci', mode="max", patience=5),
-                            #              checkpoint_callback],
-                            check_val_every_n_epoch=self.hparams.check_val_every_n_epoch)
-            # overfit_pct=hparams.overfit_pct)
-
-            trainer.fit(self.siamese_model,
-                        train_dl,
-                        val_dl) 
-            if self.modelPath != '': 
-                torch.save(self.siamese_model, self.modelPath)
+        trainer.fit(self.siamese_model,
+                    train_dl,
+                    val_dl) 
+        if self.modelPath != '': 
+            torch.save(self.siamese_model, self.modelPath)
     
     def predict(self, X):
         if type(X) == pd.DataFrame: 
@@ -256,21 +219,6 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
     def getConfig(self): 
         """return a configuration object for the neural network"""
         raise NotImplementedError
-
-        # For DEEP cinet
-        # self.config = {
-        #     'hidden_one': 128,
-        #     'hidden_two': 512,
-        #     'hidden_three': 128,
-        #     'hidden_four': 0,  # TODO: Figure out why
-        #     'dropout': self.dropout,
-        #     'lr': self.learning_rate,
-        #     'batchnorm': True,
-        #     # 'dat_size': self.gene_data.gene_num(),
-        # }
-
-        # For LINEAR cinet
-        # 
     
     @abstractattr
     def isLinear(self): 

@@ -9,30 +9,54 @@ import sys
 from io import StringIO
 from lifelines.utils import concordance_index
 from sklearn.preprocessing import StandardScaler
-
-
-model = cinet(modelPath='cinet2.ckpt', device='gpu')
+from sklearn.model_selection import GridSearchCV
 
 file_list = os.listdir(r'/home/gputwo/bhklab/kevint/cinet/data/')
+model = deepCINET(modelPath='checkpoint.ckpt', device='gpu')
+
+data = {}
+
+for file in file_list: 
+    name = file.replace('_response.csv','').replace('rnaseq_','').replace('gene_', '')
+    df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/data/' + file).set_index('cell_line')
+    X = df.iloc[:,1:]
+    y = df.iloc[:,0]
+    param_grid = { "delta" : [0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2] }
+    grid = GridSearchCV(deepCINET(modelPath= (name + '.ckpt'), device='cpu', batch_size=2**12), param_grid, refit = True, verbose = 3,n_jobs=1)
+    grid.fit(X,y)
+    data[name] = {
+        "best_params" : grid.best_params_,
+        "cv_results" : grid.cv_results_,
+    }
+    # with open('hparam_tuning_delta.json', 'w') as fp:
+        # json.dump(data, fp)
+
+
 
 ### PREPARE INPUT DATA
-df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/data/' + file_list[0]).set_index('cell_line')
-X = df.iloc[:,2:]
-y = df.iloc[:,1]
+df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/data/' + file_list[1]).set_index('cell_line')
+X = df.iloc[:,1:]
+y = df.iloc[:,0]
 
 ### FIT THE MODEL 
 model.fit(X,y)
 
 ### TEST THE MODEL 
-df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/gene_gCSI_rnaseq_Erlotinib_response.csv').iloc[:,1:]
+# df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/gene_gCSI_rnaseq_Erlotinib_response.csv').iloc[:,1:]
+df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/gene_gCSI_rnaseq_AZD7762_response.csv').iloc[:,1:]
 df.values[:] =  StandardScaler().fit_transform(df)
-model.score(df.iloc[:,1:], df.iloc[:,0])
+model.score(df.iloc[:, 1:], df.iloc[:, 0]) 
 
 
-
-
-
+### CV ###
+param_grid = { "delta" : [0.0,0.025,0.05,0.075,0.1, ]}
+grid = GridSearchCV(deepCINET(modelPath='cinet2.ckpt', device='cpu', batch_size=2**12), param_grid, refit = True, verbose = 3,n_jobs=1)
+grid.fit(X,y)
 #######
+
+
+
+
 
 
 data = dict()
