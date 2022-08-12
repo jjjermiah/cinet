@@ -11,68 +11,7 @@ from lifelines.utils import concordance_index
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
 import pickle
-
-file_list = os.listdir(r'/home/gputwo/bhklab/kevint/cinet/train_data/')
-model = ECINET(device='gpu')
-
-data = {}
-
-for file in file_list: 
-    name = file.replace('_response.csv','').replace('rnaseq_','').replace('gene_', '')
-    df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/train_data/' + file).set_index('cell_line')
-    X = df.iloc[:,1:]
-    y = df.iloc[:,0]
-    param_grid = { "delta" : [0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2] }
-    grid = GridSearchCV(ECINET(modelPath= (name + '.ckpt'), device='cpu', batch_size=2**12), param_grid, refit = True, verbose = 3,n_jobs=1)
-    grid.fit(X,y)
-    data[name] = {
-        "best_params" : grid.best_params_,
-        "cv_results" : grid.cv_results_,
-    }
-
-
-
-for key in data:
-    for result in data[key]:
-        for x in data[key][result]:
-            dataType = type(data[key][result][x])
-            if dataType == numpy.ndarray: 
-                data[key][result][x] = data[key][result][x].tolist()
-                
-
-
-
-with open('hparam_tuning_delta2.json', 'w') as fp:
-    json.dump(data, fp)
-   
-
-
-### PREPARE INPUT DATA
-df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/train_data/' + file_list[1]).set_index('cell_line')
-X = df.iloc[:,1:]
-y = df.iloc[:,0]
-
-### FIT THE MODEL 
-model.fit(X,y)
-
-### TEST THE MODEL 
-# df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/gene_gCSI_rnaseq_Erlotinib_response.csv').iloc[:,1:]
-df = pd.read_csv('/home/gputwo/bhklab/kevint/cinet/gene_gCSI_rnaseq_AZD7762_response.csv').iloc[:,1:]
-df.values[:] =  StandardScaler().fit_transform(df)
-model.score(df.iloc[:, 1:], df.iloc[:, 0]) 
-
-
-### CV ###
-param_grid = { "delta" : [0.0,0.025,0.05,0.075,0.1, ]}
-grid = GridSearchCV(deepCINET(modelPath='cinet2.ckpt', device='cpu', batch_size=2**12), param_grid, refit = True, verbose = 3,n_jobs=1)
-grid.fit(X,y)
-#######
-
-
-
-
-
-
+import numpy
 
 
 ### GET RESULTS 
@@ -101,13 +40,6 @@ for test_directory in [r'/home/gputwo/bhklab/kevint/cinet/train_data/', r'/home/
 
 with open('results.json', 'w') as fp:
     json.dump(data, fp)
-
-
-
-
-
-
-
 
 
 
