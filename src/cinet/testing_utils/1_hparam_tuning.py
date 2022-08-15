@@ -11,13 +11,15 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
 import pickle
 import numpy
+import time
 
 # Set the training data directory
 file_dir = r'/home/gputwo/bhklab/kevint/cinet/train_data/'
 file_list = os.listdir(file_dir)
 
 # Set the parameter grid
-param_grid = { "delta" : [0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2] }
+# param_grid = { "delta" : [0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2] }
+param_grid = { "delta" : [0.0, 0.01] }
 
 # Set the directory to which model checkpoint files (.ckpt) will be saved
 save_dir = './'
@@ -28,17 +30,29 @@ save_dir = './'
 # All the data will be saved to the dict called "data"
 data = {}
 
-for file in file_list: 
-    name = file.replace('_response.csv','').replace('rnaseq_','').replace('gene_', '')
-    df = pd.read_csv(file_dir + file).set_index('cell_line')
-    X = df.iloc[:,1:]
-    y = df.iloc[:,0]
-    grid = GridSearchCV(ECINET(modelPath= (save_dir + name + '.ckpt'), device='cpu', batch_size=2**12), param_grid, refit = True, verbose = 3,n_jobs=1)
-    grid.fit(X,y)
-    data[name] = {
-        "best_params" : grid.best_params_,
-        "cv_results" : grid.cv_results_,
-    }
+def train():
+    for file in file_list[:2]: 
+        name = file.replace('_response.csv','').replace('rnaseq_','').replace('gene_', '')
+        df = pd.read_csv(file_dir + file).set_index('cell_line')
+        X = df.iloc[:,1:]
+        y = df.iloc[:,0]
+        grid = GridSearchCV(deepCINET(modelPath= (save_dir + name + '.ckpt'), device='cpu', batch_size=2**12), param_grid, refit = True, verbose = 3,n_jobs=3)
+        grid.fit(X,y)
+        data[name] = {
+            "best_params" : grid.best_params_,
+            "cv_results" : grid.cv_results_,
+        }
+
+
+start_time = time.time()
+train()
+print("--- %s seconds ---" % (time.time() - start_time))
+
+# num_workers = 1, n_jobs = 1 : 1377.97 seconds
+# num_workers = 1, n_jobs = 2 : 923 seconds
+# num_workers = 2, n_jobs = 2 : 1000.9785 seconds
+# num_workers = 2, n_jobs = 1 : 1875 seconds
+
 
 # Modify the content in "data" so that numpy ndarrays and numpy maskedArrays are converted to lists
 # This is required so that the results can be saved into json

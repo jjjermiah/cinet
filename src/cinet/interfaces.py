@@ -137,6 +137,7 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
             batch_size=self.hyperparams['batch_size'], 
             shuffle=True, 
             num_workers=self.hyperparams['num_workers'],
+            multiprocessing_context='fork',
         )
 
         val_dl = torch.utils.data.DataLoader(
@@ -144,6 +145,7 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
             batch_size=self.hyperparams['batch_size'], 
             shuffle=True, 
             num_workers=self.hyperparams['num_workers'],
+            multiprocessing_context='fork',
         )
 
         # TODO: Remove this? Hard-coded stuff here. 
