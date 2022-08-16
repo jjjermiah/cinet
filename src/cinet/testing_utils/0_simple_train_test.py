@@ -21,7 +21,7 @@ file = file_dir + file_list[0]
 model = deepCINET(device='gpu')
 
 # Set the test file
-test_file = '/home/gputwo/bhklab/kevint/cinet/gene_gCSI_rnaseq_AZD7762_response.csv'
+test_file = '/home/gputwo/bhklab/kevint/cinet/test_data/GDSC_Test_Data/gene_GDSC_rnaseq_Erlotinib_response.csv'
 
 #### TRAIN ####
 

@@ -48,6 +48,61 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
     learning_rate=0.01, 
     device='cpu',
     seed=420):
+        """Initialize the CINET sklearn class
+
+        All relevant variables can be initialized here. Of interest are 'delta' 'batch_size' 'modelPath' and 'device'.
+
+        Parameters
+        ----------
+        modelPath : str
+            This it the path to where your model can be saved after training. The model will also load the model at this path when making predictions.
+            Empty by default.
+        batch_size : int
+            Batch size when training.
+            Set to 256 by default.
+        num_workers : int
+            Number of sub-processes to use for dataloading in under-the-hood PyTorch model.
+            Set to 8 by deafult.
+        folds : int
+            Number of cross-validation folds.
+            Set to 5 by default.
+        use_folds : bool
+            Value set to determine if folds should be used.
+            Set to false by default.
+        momentum : float
+            Momentum to be used in neural network training. 
+            Set to 5.0 by default.
+        weight_decay : float 
+            Weight decay to be used in neural network training. 
+            Set to 5.0 by default.
+        sc_milestones : array
+            Milestones for optimization / learning rate scheduler. Array of integers.
+            Set to [1,2,5,15,30] by default.
+        sc_gamma : float
+            Gamma value for optimization / learning rate scheduler. 
+            Set to 0.35 by default. 
+        delta : float
+            The minimum difference between target/response (y-vector) values for training data pairs to be included in training the siamese network.
+            Set to 0.0 by default. 
+        dropout : float
+            Dropout value used in neural network training. 
+            Set to 0.4 by default. 
+        learning_rate : float
+            Default learning rate to be used in neural network training. 
+            Set to 0.01 by default. 
+        device : string
+            The device to train on. Can be 'cpu' or 'gpu'.
+            Set to 'cpu' by default.
+        seed : int
+            The seed value for neural network training. 
+            Set to 420 by default.
+
+        Examples
+        --------
+        >>> model = deepCINET(batch_size=1024, momentum=4.0, delta=0.05, seed=999)
+        >>> model = ECINET(batch_size=1024, momentum=4.0, delta=0.05, seed=999)        
+        """
+
         self.arg_lists = []
         self._estimator_type = 'classifier'
         self.modelPath = modelPath
@@ -67,6 +122,9 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
 
 
     def _validate_params(self): 
+        """Validate all parameters initialized in the model. 
+        This function is a private function called every time that .fit() is called. 
+        """
         assert isinstance(self.batch_size, int), 'batch_size must be of type int'
         assert isinstance(self.num_workers, int), 'num_workers must be of type int'
         assert isinstance(self.folds, int), 'folds must be of type int'
@@ -84,6 +142,15 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
 
 
     def fit(self, X=None, y=None): 
+        """Train the model based on training input data 
+        
+        Parameters
+        ----------
+        X : pandas.dataframe
+            Input training data.
+        y : pandas.dataframe
+            Output data to be predicted.
+        """
         self._validate_params()
         print("🚀🚀🚀🚀TESTING WITH HYPERPARAMETERS🚀🚀🚀🚀")
         print("delta", self.delta)
@@ -184,6 +251,19 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
             torch.save(self.siamese_model, self.modelPath)
     
     def predict(self, X):
+        """Predict a ranked list from input data
+        
+        Parameters
+        ----------
+        X : pandas.dataframe
+            Input test data.
+
+        Returns
+        -------
+        torch.Tensor
+            Returns a pytorch tensor of the predicted values
+
+        """
         if type(X) == pd.DataFrame: 
             X = torch.FloatTensor(X.values)
         if self.modelPath != '': 
