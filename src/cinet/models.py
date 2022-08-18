@@ -197,16 +197,14 @@ class DeepCINET(pl.LightningModule):
 
         # to be tuned hyper-parameters
         self.data_dir = data_dir or os.getcwd()
-        self.hidden_one = config["hidden_one"]
-        self.hidden_two = config["hidden_two"]
-        self.hidden_three = config["hidden_three"]
-        self.hidden_four = config["hidden_four"]
+        self.nnHiddenLayers = config["nnHiddenLayers"]
         self.data_sz = config["dat_size"]
         if linear:
             self.ratio = config["ratio"]
             self.reg_contr = config["reg_contr"]
+        print(self.nnHiddenLayers)
         self.layers_size = [i for i in
-                            [self.data_sz, self.hidden_one, self.hidden_two, self.hidden_three, self.hidden_four, 1] if
+                            [self.data_sz, *list(self.nnHiddenLayers), 1] if
                             i != 0]
         self.dropout = config["dropout"]
         self.lr = config["lr"]

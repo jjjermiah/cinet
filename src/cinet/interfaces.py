@@ -310,12 +310,24 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
 
 
 class deepCINET(BaseCINET): 
+    def __init__(self, nnHiddenLayers=(128,512,128,0), **kwargs):
+        # """
+        # nnHiddenLayers : tuple of integers
+        #     Describes the neural network architecture for deepCINET.
+        # """
+        self.nnHiddenLayers = nnHiddenLayers
+        super().__init__(**kwargs)
+
+    def _validate_params(self): 
+        super()._validate_params()
+        assert isinstance(self.nnHiddenLayers, tuple), 'nnHiddenLayers must be of type tuple'
+        for i in range(len(self.nnHiddenLayers)):
+            assert isinstance(self.nnHiddenLayers[i], int), 'values in nnHiddenLayers must be of type int'
+
+
     def getConfig(self): 
         return  {
-            'hidden_one': 128,
-            'hidden_two': 512,
-            'hidden_three': 128,
-            'hidden_four': 0,  
+            'nnHiddenLayers': self.nnHiddenLayers,
             'dropout': self.dropout,
             'lr': self.learning_rate,
             'batchnorm': True,
@@ -327,10 +339,7 @@ class deepCINET(BaseCINET):
 class ECINET(BaseCINET): 
     def getConfig(self): 
         return {
-            'hidden_one': 0,
-            'hidden_two': 0,
-            'hidden_three': 0,
-            'hidden_four': 0, 
+            'nnHiddenLayers': (0,0,0,0),
             'dropout': self.dropout,
             'lr': self.learning_rate,
             'batchnorm': False,
