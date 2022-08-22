@@ -183,37 +183,15 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
         if len(X) != len(y):
             raise Exception("X and y values are not of the same length")
         
-
+        self.config['dat_size'] = X.shape[1]
         combined_df = pd.concat([X,y],axis=1)
         combined_df.columns.values[-1] = 'target'
-
-        print(combined_df.shape, combined_df.columns)
 
         # Check if the combined dataframe is the right size
         if len(combined_df) != len(X): 
             raise Exception("X and y values must have the same indices")
 
-        self.dataSet = combined_df
-        self.gene_data = Dataset(self.dataSet, False, self.batch_size)
-        train_idx, val_idx = train_test_split(list(range(self.gene_data.__len__())), test_size=0.2)
-
-        self.config['dat_size'] = self.gene_data.gene_exprs.shape[1]
-
-        train_dl = torch.utils.data.DataLoader(
-            Dataset(combined_df, True, self.batch_size, self.delta, train_idx),
-            batch_size=self.hyperparams['batch_size'], 
-            shuffle=True, 
-            num_workers=self.hyperparams['num_workers'],
-            multiprocessing_context='fork',
-        )
-
-        val_dl = torch.utils.data.DataLoader(
-            Dataset(combined_df, True, self.batch_size, self.delta, val_idx),
-            batch_size=self.hyperparams['batch_size'], 
-            shuffle=True, 
-            num_workers=self.hyperparams['num_workers'],
-            multiprocessing_context='fork',
-        )
+        train_dl, val_dl = self.get_dataloaders(combined_df)
 
         # TODO: Remove this? Hard-coded stuff here. 
         # filename_log = f'Vorinostat-delta={self.delta:.3f}'
@@ -308,6 +286,42 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
         FullyConnectedLinear as opposed to FullyConnected"""
         raise NotImplementedError
 
+    def get_dataloaders(self, dataSet): 
+        """Returns a tuple containing the training and then the testing PyTorch DataLoaders.
+
+        Parameters
+        ----------
+        dataSet : pandas.DataFrame
+            Takes in a Pandas DataFrame object.
+
+        Returns
+        -------
+        A tuple with two objects. The first one is the training dataloader (PyTorch.DataLoader), the 
+        second is the testing dataloader. 
+        """
+        gene_data = Dataset(dataSet, False, self.batch_size)
+
+        train_idx, val_idx = train_test_split(list(range(gene_data.__len__())), test_size=0.2)
+
+        train_dl = torch.utils.data.DataLoader(
+            Dataset(dataSet, True, self.batch_size, self.delta, train_idx),
+            batch_size=self.hyperparams['batch_size'], 
+            shuffle=True, 
+            num_workers=self.hyperparams['num_workers'],
+            multiprocessing_context='fork',
+        )
+
+        val_dl = torch.utils.data.DataLoader(
+            Dataset(dataSet, True, self.batch_size, self.delta, val_idx),
+            batch_size=self.hyperparams['batch_size'], 
+            shuffle=True, 
+            num_workers=self.hyperparams['num_workers'],
+            multiprocessing_context='fork',
+        )
+
+        return (train_dl, val_dl)
+
+
 
 class deepCINET(BaseCINET): 
     def __init__(self, nnHiddenLayers=(128,512,128,0), **kwargs):
@@ -321,6 +335,7 @@ class deepCINET(BaseCINET):
     def _validate_params(self): 
         super()._validate_params()
         assert isinstance(self.nnHiddenLayers, tuple), 'nnHiddenLayers must be of type tuple'
+        assert (len(self.nnHiddenLayers) == 4), 'nnHiddenLayers must have only four values'
         for i in range(len(self.nnHiddenLayers)):
             assert isinstance(self.nnHiddenLayers[i], int), 'values in nnHiddenLayers must be of type int'
 
