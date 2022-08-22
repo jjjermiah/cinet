@@ -34,7 +34,6 @@ y = df.iloc[:,0]
 model.fit(X,y)
 
 #### TEST ####
-
 df = pd.read_csv(test_file).iloc[:,1:]
 df.values[:] =  StandardScaler().fit_transform(df)
 model.score(df.iloc[:, 1:], df.iloc[:, 0]) 

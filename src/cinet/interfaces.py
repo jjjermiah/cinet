@@ -170,6 +170,7 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
             "seed" : self.seed,
             "sc_milestones" : self.sc_milestones,
             "sc_gamma" : self.sc_gamma,
+            "device" : self.device,
         }
 
         torch.backends.cudnn.benchmark = False
@@ -184,6 +185,9 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
             raise Exception("X and y values are not of the same length")
         
         self.config['dat_size'] = X.shape[1]
+        self.config['dropout'] = self.dropout
+        self.config['lr'] = self.learning_rate
+
         combined_df = pd.concat([X,y],axis=1)
         combined_df.columns.values[-1] = 'target'
 
@@ -203,23 +207,9 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
         #     mode='max'
         # )
 
-        self.siamese_model = DeepCINET(hyperparams=self.hyperparams, config=self.config, linear=self.isLinear())
-        trainer = Trainer(min_epochs=self.hyperparams['min_epochs'],
-                        max_epochs=self.hyperparams['max_epochs'],
-                        min_steps=self.hyperparams['min_steps'],
-                        max_steps=self.hyperparams['max_steps'],
-                        gpus=1,
-                        devices=1,
-                        accelerator=self.device,
-                        accumulate_grad_batches=self.hyperparams['accumulate_grad_batches'],
-                        # distributed_backend='dp',
-                        weights_summary='full',
-                        # enable_benchmark=False,
-                        num_sanity_val_steps=0,
-                        # auto_find_lr=hparams.auto_find_lr,
-                        #   callbacks=[EarlyStopping(monitor='val_ci', mode="max", patience=5),
-                        #              checkpoint_callback],
-                        check_val_every_n_epoch=self.hyperparams['check_val_every_n_epoch'])
+        self.siamese_model = self.get_model(self.config)
+        trainer = self.get_trainer(self.hyperparams)
+
         # overfit_pct=hparams.overfit_pct)
 
         trainer.fit(self.siamese_model,
@@ -272,19 +262,67 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
     def getPytorchModel(self):
         return self.siamese_model if self.siamese_model is not None else None
 
-
     ### TO BE IMPLEMENTED BY INHERITING CLASSES ###
 
     @abstractattr
     def getConfig(self): 
-        """return a configuration object for the neural network"""
+        """return a configuration object for the neural network
+        
+        Must Contain 
+        ------------
+        nnHiddenLayers : tuple
+            A tuple of integers to configure the layers in the neural net
+        batchnorm : bool
+            A boolean to determine if batch normalization should be applied
+        """
         raise NotImplementedError
-    
+
     @abstractattr
-    def isLinear(self): 
-        """return a boolean value indicating whether the model is linear, and should use 
-        FullyConnectedLinear as opposed to FullyConnected"""
-        raise NotImplementedError
+    def get_model(self, config): 
+        """return the siamese model (PyTorch model)
+
+        Parameters 
+        ----------
+        config : dict
+            A dictionary containing configuration variables relevant to the model.
+
+        Returns
+        -------
+        A PyTorch model for the network.
+        """
+
+    ### OPTIONAL TO IMPLEMENT ###
+
+    def get_trainer(self, hyperparams): 
+        """Returns a PyTorch Lightning Trainer Object
+
+        Parameters
+        ----------
+        hyperparams : dict
+            A hyperparameter object with relevant values for trainer initialization.
+
+        Returns
+        -------
+        A PyTorch Lightning Trainer Object
+        """
+        trainer = Trainer(min_epochs=hyperparams['min_epochs'],
+                max_epochs=hyperparams['max_epochs'],
+                min_steps=hyperparams['min_steps'],
+                max_steps=hyperparams['max_steps'],
+                gpus=1,
+                devices=1,
+                accelerator=hyperparams['device'],
+                accumulate_grad_batches=hyperparams['accumulate_grad_batches'],
+                # distributed_backend='dp',
+                weights_summary='full',
+                # enable_benchmark=False,
+                num_sanity_val_steps=0,
+                # auto_find_lr=hparams.auto_find_lr,
+                #   callbacks=[EarlyStopping(monitor='val_ci', mode="max", patience=5),
+                #              checkpoint_callback],
+                check_val_every_n_epoch=hyperparams['check_val_every_n_epoch'])
+        
+        return trainer
 
     def get_dataloaders(self, dataSet): 
         """Returns a tuple containing the training and then the testing PyTorch DataLoaders.
@@ -322,6 +360,8 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
         return (train_dl, val_dl)
 
 
+### INHERITING CLASSES ###
+
 
 class deepCINET(BaseCINET): 
     def __init__(self, nnHiddenLayers=(128,512,128,0), **kwargs):
@@ -343,27 +383,24 @@ class deepCINET(BaseCINET):
     def getConfig(self): 
         return  {
             'nnHiddenLayers': self.nnHiddenLayers,
-            'dropout': self.dropout,
-            'lr': self.learning_rate,
             'batchnorm': True,
         }
     
-    def isLinear(self): 
-        return False
+    def get_model(self, config):
+        return DeepCINET(hyperparams=self.hyperparams, config=config, linear=False)
+        
 
 class ECINET(BaseCINET): 
     def getConfig(self): 
         return {
             'nnHiddenLayers': (0,0,0,0),
-            'dropout': self.dropout,
-            'lr': self.learning_rate,
             'batchnorm': False,
             # TODO: Not hardcode these two following values
             'ratio': 0.4, 
             'reg_contr': 0.4,
         }
 
-    def isLinear(self): 
-        return True
+    def get_model(self, config):
+        return DeepCINET(hyperparams=self.hyperparams, config=config, linear=True)
 
 
