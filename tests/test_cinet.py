@@ -7,6 +7,6 @@ def test_init_deepCINET():
 
 def test_init_ECINET():
     """Test initializing ECINET (Linear CINET)"""
-    ECmodel = ECINET(detla=0.05)
+    ECmodel = ECINET(delta=0.05)
     
     assert (ECmodel.delta == 0.05), "Delta not initialized correctly"
