@@ -268,8 +268,8 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
     def getConfig(self): 
         """return a configuration object for the neural network
         
-        Must Contain 
-        ------------
+        The config object must contain the following parameters: 
+        
         nnHiddenLayers : tuple
             A tuple of integers to configure the layers in the neural net
         batchnorm : bool

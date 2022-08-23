@@ -1,3 +1,4 @@
 from cinet import *
 
-model = deepCINET()
+DCmodel = deepCINET()
+ECmodel = ECINET()
