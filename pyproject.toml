@@ -26,6 +26,7 @@ Sphinx = "^5.1.1"
 pytest = "^7.1.2"
 sphinx-paramlinks = "^0.5.4"
 pytest-cov = "^3.0.0"
+python-semantic-release = "^7.31.4"
 [tool.semantic_release]
 version_variable = "pyproject.toml:version" # version location
 branch = "main"                             # branch to make releases of
