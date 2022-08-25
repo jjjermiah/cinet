@@ -7,8 +7,8 @@
 # -- Project information -----------------------------------------------------
 
 project = u"cinet"
-copyright = u"2022, Christopher Eeles"
-author = u"Christopher Eeles"
+copyright = u"2022, Christopher Eeles, Kevin Tabatabaei, Benjamin Haibe-Kains Lab (BHK Lab)"
+author = u"Christopher Eeles, Kevin Tabatabaei"
 
 # -- General configuration ---------------------------------------------------
 
