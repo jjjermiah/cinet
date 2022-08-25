@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cinet"
-version = "0.0.10"
+version = "0.0.11"
 description = "Scikit-Learn interface for CINET PyTorch siamese neural network"
 authors = ["Christopher Eeles", "Kevin Tabatabaei"]
 license = "MIT"
