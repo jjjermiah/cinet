@@ -12,7 +12,7 @@ def test_init_ECINET():
     
     assert (ECmodel.delta == 0.05), "Delta not initialized correctly"
 
-def integrative_test_deepCINET(): 
+def test_integrative_deepCINET(): 
     DCmodel = deepCINET(seed=420)
     train_file = r'/home/gputwo/bhklab/kevint/cinet/tests/fake_train_data.txt'
     train_df = pd.read_csv(train_file).set_index('cell_line')
@@ -28,7 +28,7 @@ def integrative_test_deepCINET():
     y2 = test_df.iloc[:,0]
     assert (DCmodel.score(X2,y2) == 0.7028571428571428), "DeepCINET Integrative Test did not not achieve the correct value on scoring the model against testing data"
 
-def integrative_test_ECINET(): 
+def test_integrative_ECINET(): 
     ECmodel = ECINET(seed=420)
     train_file = r'/home/gputwo/bhklab/kevint/cinet/tests/fake_train_data.txt'
     train_df = pd.read_csv(train_file).set_index('cell_line')
