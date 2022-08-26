@@ -232,17 +232,23 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
             Returns a pytorch tensor of the predicted values
 
         """
-        if type(X) == pd.DataFrame: 
-            X = torch.FloatTensor(X.values)
+
+        # Non-official way to do this
+        # np.random.seed(self.hyperparams["seed"])
+        # torch.manual_seed(self.hyperparams["seed"])
+        
+        index = X.index.values.tolist()
+        X = torch.FloatTensor(X.values)
         if self.modelPath != '': 
             self.siamese_model = torch.load(self.modelPath)
-            self.siamese_model.eval()
-        return self.siamese_model.fc(X)
+
+        self.siamese_model.eval()
+        
+        result_df = pd.Series(self.siamese_model.fc(X).detach().numpy().tolist(), index=index)
+        return result_df
 
     def score(self, X=None, y=None):
-        if type(X) == pd.DataFrame: 
-            X = torch.FloatTensor(X.values)
-        temp_list = self.predict(X).detach().numpy().tolist()
+        temp_list = self.predict(X).tolist()
         final_list = []
         for t in temp_list: 
             final_list.append(t[0])
