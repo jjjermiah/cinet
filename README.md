@@ -49,7 +49,7 @@ Interested in contributing? Check out the contributing guidelines. Please note t
 
 ## License
 
-`cinet` was created by Christopher Eeles. It is licensed under the terms of the MIT license.
+`cinet` was created by Kevin Tabatabaei and Christopher Eeles. It is licensed under the terms of the MIT license.
 
 ## Credits
 
