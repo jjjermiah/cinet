@@ -22,14 +22,14 @@ def test_integrative_deepCINET():
     DCmodel.fit(X,y)
     result = DCmodel.score(X,y)
     print(result)
-    assert (round(result, 3) == 0.708), "DeepCINET Integrative Test did not not achieve the correct value on scoring the model against training data"
+    assert (round(result, 3) >= 0.705 and round(result, 3) <= 0.710), "DeepCINET Integrative Test did not not achieve the correct value on scoring the model against training data"
 
     test_file = r'tests/fake_test_data.txt'
     test_df = pd.read_csv(test_file).set_index('cell_line')
     X2 = test_df.iloc[:,1:]
     y2 = test_df.iloc[:,0]
     result2 = DCmodel.score(X2,y2)
-    assert (round(result2, 3) == 0.703), "DeepCINET Integrative Test did not not achieve the correct value on scoring the model against testing data"
+    assert (round(result2, 3) >= 0.700 and round(result2, 3) <= 0.705), "DeepCINET Integrative Test did not not achieve the correct value on scoring the model against testing data"
 
 def test_integrative_ECINET(): 
     ECmodel = ECINET(seed=420)
@@ -41,11 +41,11 @@ def test_integrative_ECINET():
     ECmodel.fit(X,y)
     result = ECmodel.score(X,y)
     print(result)
-    assert (round(result, 3) == 0.635), "ECINET Integrative Test did not not achieve the correct value on scoring the model against training data"
+    assert (round(result, 3) >= 0.632 and round(result, 3) <= 0.638), "ECINET Integrative Test did not not achieve the correct value on scoring the model against training data"
 
     test_file = r'tests/fake_test_data.txt'
     test_df = pd.read_csv(test_file).set_index('cell_line')
     X2 = test_df.iloc[:,1:]
     y2 = test_df.iloc[:,0]
     result2 = ECmodel.score(X2,y2)
-    assert (round(result2, 3) == 0.629), "ECINET Integrative Test did not not achieve the correct value on scoring the model against testing data"
+    assert (round(result2, 3) >= 0.626 and round(result2, 3) <= 0.632), "ECINET Integrative Test did not not achieve the correct value on scoring the model against testing data"
