@@ -1,0 +1,1 @@
+{"drugs": ["Ibrutinib"], "architecture": [[32, 32, 0, 0], [64, 64, 0, 0], [128, 128, 0, 0]], "deltas": [0.0, 0.05, 0.1, 0.15, 0.2], "batch_size": 64, "epochs": 20, "dropout": 0.5, "gene indices": [50, 100, 200]}
