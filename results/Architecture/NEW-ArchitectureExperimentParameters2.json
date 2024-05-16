@@ -1,0 +1,1 @@
+{"drugs": ["AZD7762", "Dabrafenib", "Ibrutinib"], "architectures": [[128, 256, 128, 0], [128, 512, 128, 0]], "deltas": [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.15, 0.2], "batch_size": 128, "epochs": 30, "dropout": 0.5, "num_genes": 100}
