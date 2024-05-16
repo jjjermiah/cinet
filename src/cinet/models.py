@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import os
 import argparse
+import tensorboard
 
 ## FIXME:: modularize these imports and remove as many as possible!
 
@@ -18,14 +19,14 @@ import pytorch_lightning as pl
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.utilities.cloud_io import load as pl_load
+# from pytorch_lightning.utilities.cloud_io import load as pl_load
 
-from ray import tune
-from ray.tune import CLIReporter
-from ray.tune.schedulers.hb_bohb import HyperBandForBOHB
-from ray.tune.suggest.bohb import TuneBOHB
-from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining, HyperBandForBOHB
-from ray.tune.integration.pytorch_lightning import TuneCallback
+# from ray import tune
+# from ray.tune import CLIReporter
+# from ray.tune.schedulers.hb_bohb import HyperBandForBOHB
+# from ray.tune.search.bohb import TuneBOHB
+# from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining, HyperBandForBOHB
+# from ray.tune.integration.pytorch_lightning import TuneCallback
 
 
 class FullyConnected(nn.Module):
@@ -85,24 +86,46 @@ class Dataset(torch.utils.data.Dataset):
         object.
     """
 
-    def __init__(self, dataframe, is_train, batch_size, delta=0, idxs=None):
-        self.gene_exprs = dataframe
+    def __init__(self, dataframe, is_train, batch_size, delta=0, idxs=None, pre_built = False, pairs= None):
         self.batch_size = batch_size
-        if idxs is not None:
-            self.gene_exprs = self.gene_exprs.iloc[idxs]
-        self.drug_resps = self.gene_exprs["target"].to_numpy()
-        # self.cell_lines = self.gene_exprs["cell_line"].to_numpy()
-        self.cell_lines = self.gene_exprs.index.values.tolist()
-        # self.gene_exprs = self.gene_exprs.drop(["target", "cell_line"], axis=1).to_numpy()
-        self.gene_exprs = self.gene_exprs.drop(["target"], axis=1).to_numpy()
-        self.gene_exprs = (self.gene_exprs - np.mean(self.gene_exprs, axis=0)) / np.std(self.gene_exprs, axis=0)
+        if pre_built:
+            self._sample_list = pairs
+            self._is_train = is_train
+            self.delta = delta
+            self.gene_exprs = dataframe
+            self.drug_resps = self.gene_exprs["target"].to_numpy()
+            self.cell_lines = self.gene_exprs.index.values.tolist()
+            self.gene_exprs = self.gene_exprs.drop(["target"], axis=1).to_numpy()
+            self.gene_exprs = (self.gene_exprs - np.mean(self.gene_exprs, axis=0)) / np.std(self.gene_exprs, axis=0)
+        else:
+            if idxs is not None:
+                self.gene_exprs = dataframe.iloc[idxs]
+            else:
+                self.gene_exprs = dataframe
+            self.drug_resps = self.gene_exprs["target"].to_numpy()
+            # self.cell_lines = self.gene_exprs["cell_line"].to_numpy()
+            self.cell_lines = self.gene_exprs.index.values.tolist()
+            # self.gene_exprs = self.gene_exprs.drop(["target", "cell_line"], axis=1).to_numpy()
+            self.gene_exprs = self.gene_exprs.drop(["target"], axis=1).to_numpy()
+            # number_of_genes = self.gene_exprs[0].size
+            # number_of_cell_lines = self.gene_exprs[:,0].size
+            # sds = np.std(self.gene_exprs, axis=0)
+            # print(sds)
+            # count = 0
+            # for sd in sds:
+            #     if sd == 0:
+            #         count = count + 1
+            # print(str(count) + "/" + str(number_of_genes) + " genes have 0 standard deviation.")
+            # print("There are " + str(number_of_cell_lines) + " cell-lines in this dataset.")
+            
+            self.gene_exprs = (self.gene_exprs - np.mean(self.gene_exprs, axis=0)) / np.std(self.gene_exprs, axis=0)
 
 
-        print("SHAPE2: ", self.gene_exprs.shape)
+            print("SHAPE2: ", self.gene_exprs.shape)
 
-        self._is_train = is_train
-        self.delta = delta
-        self._sample_list = self._build_pairs(self.delta)
+            self._is_train = is_train
+            self.delta = delta
+            self._sample_list = self._build_pairs(self.delta)
 
     def __len__(self):
         return len(self._sample_list)

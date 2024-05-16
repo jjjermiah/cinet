@@ -6,8 +6,9 @@ import sklearn
 import pandas as pd
 import numpy as np
 import argparse
-
+from tensorboard.summary import Writer
 from abc import ABCMeta, abstractmethod, abstractstaticmethod
+import random
 
 from lifelines.utils import concordance_index
 
@@ -22,6 +23,9 @@ import pytorch_lightning as pl
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks import ModelCheckpoint
+
+from sklearn.model_selection import StratifiedKFold
+import seaborn as sns
 
 def abstractattr(f):
     return property(abstractmethod(f))
@@ -38,7 +42,7 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
     batch_size=256,
     num_workers=8,
     folds=5, 
-    use_folds=False, 
+    use_folds=True, 
     momentum=5.0, 
     weight_decay=5.0, 
     sc_milestones=[1,2,5,15,30], 
@@ -47,6 +51,7 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
     dropout=0.4, 
     learning_rate=0.01, 
     device='cpu',
+    max_epochs=12,
     seed=420):
         """Initialize the CINET sklearn class
 
@@ -118,6 +123,7 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
         self.dropout = dropout
         self.learning_rate = learning_rate
         self.device = device
+        self.max_epochs = max_epochs
         self.seed = seed
 
 
@@ -141,7 +147,7 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
         assert isinstance(self.seed, int), 'seed must be of type int'
 
 
-    def fit(self, X=None, y=None): 
+    def fit(self, X=None, y=None, cross_validation=True, random_pairs=False): 
         """Train the model based on training input data 
         
         Parameters
@@ -162,7 +168,7 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
             "accumulate_grad_batches": 1, 
             "min_epochs": 0, 
             "min_steps" : None,
-            "max_epochs" : 12, 
+            "max_epochs" : self.max_epochs, 
             "max_steps" : None, 
             "check_val_every_n_epoch" : 1, 
             "gpus" : 0,
@@ -188,14 +194,13 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
         self.config['dropout'] = self.dropout
         self.config['lr'] = self.learning_rate
 
-        combined_df = pd.concat([X,y],axis=1)
+        combined_df = pd.concat([X, y], axis=1)
         combined_df.columns.values[-1] = 'target'
 
         # Check if the combined dataframe is the right size
         if len(combined_df) != len(X): 
             raise Exception("X and y values must have the same indices")
-
-        train_dl, val_dl = self.get_dataloaders(combined_df)
+        loaders = self.get_dataloaders(combined_df, cross_validation, random_pairs)
 
         # TODO: Remove this? Hard-coded stuff here. 
         # filename_log = f'Vorinostat-delta={self.delta:.3f}'
@@ -206,18 +211,52 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
         #     save_top_k=1,
         #     mode='max'
         # )
-
-        self.siamese_model = self.get_model(self.config)
-        trainer = self.get_trainer(self.hyperparams)
-
+        self.hyperparams["folds"] = 1
         # overfit_pct=hparams.overfit_pct)
+        if cross_validation:
+            num_rounds = 1
+            cross_val_ci_per_round = []
+            for _ in range(num_rounds):
+                global_prediction = pd.DataFrame()
+                for (train_dl, val_dl, val_dataset) in loaders:
+                    self.siamese_model = self.get_model(self.config)
+                    trainer = self.get_trainer(self.hyperparams)
+                    trainer.fit(self.siamese_model, train_dl)
+                    predictions = self.predict(val_dataset)
+                    global_prediction = pd.concat([global_prediction, predictions])
+                    global_prediction = global_prediction.sort_index(axis=0)
+                val_ci = concordance_index(y.iloc[:,0].tolist(), global_prediction.iloc[:,0].tolist())
+                cross_val_ci_per_round.append(val_ci)
+        else:
+            if random_pairs:
+                valid_dl, random_dl, val_dataset = loaders[0]
+                self.siamese_model = self.get_model(self.config)
+                trainer = self.get_trainer(self.hyperparams)
+                trainer.fit(self.siamese_model, valid_dl)
+                y_val = val_dataset['target']
+                valid_predictions = self.predict(val_dataset.drop('target', axis=1))
 
-        trainer.fit(self.siamese_model,
-                    train_dl,
-                    val_dl) 
-        if self.modelPath != '': 
-            torch.save(self.siamese_model, self.modelPath)
-    
+                self.siamese_model = self.get_model(self.config)
+                trainer = self.get_trainer(self.hyperparams)
+                trainer.fit(self.siamese_model, random_dl)
+                random_predictions = self.predict(val_dataset.drop('target', axis=1))
+
+                valid_score = concordance_index(y_val.tolist(), valid_predictions.tolist())
+                random_score = concordance_index(y_val.tolist(), random_predictions.tolist())
+                cross_val_ci_per_round = (valid_score, random_score)
+            else:
+                train_dl, _, _ = loaders[0]
+                self.siamese_model = self.get_model(self.config)
+                trainer = self.get_trainer(self.hyperparams)
+                if train_dl is not None:
+                    trainer.fit(self.siamese_model, train_dl)
+                    cross_val_ci_per_round = -1
+                    if self.modelPath != '': 
+                        torch.save(self.siamese_model, self.modelPath)
+                else:
+                    cross_val_ci_per_round = -2
+        return cross_val_ci_per_round
+
     def predict(self, X):
         """Predict a ranked list from input data
         
@@ -244,7 +283,7 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
 
         self.siamese_model.eval()
         
-        result_df = pd.Series(self.siamese_model.fc(X).detach().numpy().tolist(), index=index)
+        result_df = pd.Series(torch.squeeze(self.siamese_model.fc(X).detach()).numpy().tolist(), index=index)
         return result_df
 
     def score(self, X=None, y=None):
@@ -320,7 +359,7 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
                 accelerator=hyperparams['device'],
                 accumulate_grad_batches=hyperparams['accumulate_grad_batches'],
                 # distributed_backend='dp',
-                weights_summary='full',
+                # weights_summary='full',
                 # enable_benchmark=False,
                 num_sanity_val_steps=0,
                 # auto_find_lr=hparams.auto_find_lr,
@@ -330,7 +369,18 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
         
         return trainer
 
-    def get_dataloaders(self, dataSet): 
+    def classify_target(self, y):
+        max_val = max(y)
+        min_val = min(y)
+        vec_folds = list(range(1, 11))
+        dif = (max_val - min_val)/10
+        bins = [min_val-0.01]
+        for elem in vec_folds:
+            bins.append(min_val+dif*elem)
+        result = pd.cut(y, bins, labels=vec_folds)
+        return result
+
+    def get_dataloaders(self, dataSet, cross_validation, random_pairs): 
         """Returns a tuple containing the training and then the testing PyTorch DataLoaders.
 
         Parameters
@@ -343,27 +393,83 @@ class BaseCINET(sklearn.base.BaseEstimator, metaclass=ABCMeta):
         A tuple with two objects. The first one is the training dataloader (PyTorch.DataLoader), the 
         second is the testing dataloader. 
         """
-        gene_data = Dataset(dataSet, False, self.batch_size)
+        y = dataSet['target']
+        X = dataSet.iloc[:, 0:-1]
+        loaders = []
+        if cross_validation:
+            num_folds = 5
+            # gene_data = Dataset(dataSet, False, self.batch_size)
+            # print(y)
+            new_y = self.classify_target(y)
+            # print(new_y)        
+            skf = StratifiedKFold(n_splits=num_folds, random_state=None)
+            result = skf.split(X,new_y)
+            # train_idx, val_idx = train_test_split(list(range(gene_data.__len__())), test_size=0.2)
+            count = 1
+            for train_index, val_index in result:
+                dS = Dataset(dataSet, True, self.batch_size, self.delta, train_index)
+                num_pairs = len(dS._build_pairs(delta=self.delta))
+                randoms = random.sample(dS._build_pairs(delta=0.0), num_pairs)
+                train_dl = torch.utils.data.DataLoader(
+                    dS,
+                    batch_size=self.hyperparams['batch_size'], 
+                    shuffle=True, 
+                    num_workers=self.hyperparams['num_workers'],
+                    multiprocessing_context='spawn',
+                )
+                # val_dl = Dataset(dataSet, True, self.batch_size, self.delta, val_index)
+                val_dl = torch.utils.data.DataLoader(
+                    Dataset(dataSet, True, self.batch_size, self.delta, val_index),
+                    batch_size=self.hyperparams['batch_size'], 
+                    shuffle=True, 
+                    num_workers=self.hyperparams['num_workers'],
+                    multiprocessing_context='spawn',
+                )
+                val_dataset = X.iloc[val_index]
 
-        train_idx, val_idx = train_test_split(list(range(gene_data.__len__())), test_size=0.2)
-
-        train_dl = torch.utils.data.DataLoader(
-            Dataset(dataSet, True, self.batch_size, self.delta, train_idx),
-            batch_size=self.hyperparams['batch_size'], 
-            shuffle=True, 
-            num_workers=self.hyperparams['num_workers'],
-            multiprocessing_context='fork',
-        )
-
-        val_dl = torch.utils.data.DataLoader(
-            Dataset(dataSet, True, self.batch_size, self.delta, val_idx),
-            batch_size=self.hyperparams['batch_size'], 
-            shuffle=True, 
-            num_workers=self.hyperparams['num_workers'],
-            multiprocessing_context='fork',
-        )
-
-        return (train_dl, val_dl)
+                # train_aac = y.iloc[train_index]
+                # val_aac = y.iloc[val_index]
+                # tables = [(pd.DataFrame(y), "Whole"), (pd.DataFrame(train_aac), "Training"), (pd.DataFrame(val_aac), "Validation")]
+                # aux = pd.concat([df.assign(dataset=k) for (df, k) in tables])
+                # fig = sns.displot(aux, x="target", hue="dataset", kind="kde", fill=True, legend=True).set(title="AAC Distribution Comparison", xlabel="AAC Standarized", ylabel="Density")
+                # fig.savefig('AAC Distribution Comparison-' + str(count) + '.png')
+                loaders.append((train_dl, val_dl, val_dataset))
+                count = count + 1
+        else:
+            gene_data = Dataset(dataSet, False, self.batch_size)
+            train_idx, val_idx = train_test_split(list(range(gene_data.__len__())), test_size=0.2)
+            train_dl = torch.utils.data.DataLoader(
+                    Dataset(dataSet, True, self.batch_size, self.delta, train_idx),
+                    batch_size=self.hyperparams['batch_size'], 
+                    shuffle=True, 
+                    num_workers=self.hyperparams['num_workers'],
+                    multiprocessing_context='spawn',
+                )
+            if random_pairs:
+                dS = Dataset(dataSet, True, self.batch_size, self.delta, train_idx)
+                num_pairs = len(dS)
+                randoms = random.sample(dS._build_pairs(delta=0.0), num_pairs)
+                val_dl = torch.utils.data.DataLoader(
+                        Dataset(dataSet, True, self.batch_size, 0.0, pre_built=True, pairs=randoms),
+                        batch_size=self.hyperparams['batch_size'], 
+                        shuffle=True, 
+                        num_workers=self.hyperparams['num_workers'],
+                        multiprocessing_context='spawn',
+                    )
+                val_dataset = dataSet.iloc[val_idx]
+                loaders.append((train_dl, val_dl, val_dataset))
+            else:
+                """
+                val_dl = torch.utils.data.DataLoader(
+                        Dataset(dataSet, True, self.batch_size, self.delta, val_idx),
+                        batch_size=self.hyperparams['batch_size'], 
+                        shuffle=True, 
+                        num_workers=self.hyperparams['num_workers'],
+                        multiprocessing_context='spawn',
+                    )
+                """
+                loaders.append((train_dl, None, None))
+        return loaders
 
 
 ### INHERITING CLASSES ###
