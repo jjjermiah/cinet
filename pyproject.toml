@@ -14,7 +14,7 @@ pytorch-lightning = "^1.6.4"
 numpy = "^1.23.0"
 pandas = "^1.4.3"
 lifelines = "^0.27.1"
-sklearn = "^0.0"
+scikit-learn = "^0.0"
 tabulate = "^0.8.10"
 ConfigSpace = "^0.5.0"
 
